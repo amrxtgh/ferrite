@@ -20,3 +20,5 @@ crc32fast = "1"
 
 [dependencies]
 thiserror = "2.0.21"
+ferrite-core = { path = "crates/ferrite-core" }
+ferrite-storage = { path = "crates/ferrite-storage" }

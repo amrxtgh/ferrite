@@ -21,6 +21,8 @@ dependencies = [
 name = "ferrite"
 version = "0.1.0"
 dependencies = [
+ "ferrite-core",
+ "ferrite-storage",
  "thiserror",
 ]
 
