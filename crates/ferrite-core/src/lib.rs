@@ -19,8 +19,8 @@ pub struct Value(Vec<u8>);
 
 impl Value {
     // but bytes can be anything
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Value(bytes)
+    pub fn new(bytes: impl Into<Vec<u8>>) -> Self {
+        Value(bytes.into())
     }
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
@@ -39,6 +39,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub trait KvStore {
     fn put(&mut self, key: Key, val: Value) -> Result<()>;
-    fn get(&mut self, key: &Key) -> Result<Option<Value>>;
+    fn get(&self, key: &Key) -> Result<Option<Value>>;
     fn del(&mut self, key: Key) -> Result<()>;
 }
