@@ -3,4 +3,20 @@ name = "ferrite"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+resolver = "3"
+members = [
+"crates/ferrite-core"
+, "crates/ferrite-storage"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+version = "0.1.0"
+
+[workspace.dependencies]
+thiserror = "2.0.21"
+crc32fast = "1"
+
 [dependencies]
+thiserror = "2.0.21"
