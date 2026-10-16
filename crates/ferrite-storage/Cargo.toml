@@ -1,0 +1,9 @@
+[package]
+name = "ferrite-storage"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[dependencies]
+ferrite-core = { path = "../ferrite-core" }
+crc32fast.workspace = true
