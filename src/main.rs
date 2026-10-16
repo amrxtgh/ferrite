@@ -1,23 +1,27 @@
+//! Ferrite: multi-node, Raft-replicated KV store with MVCC transactions.
+//!
+//! Raft lets a group of machines agree on the same sequence of events,
+//! even when some of them crash or the network drops messages.
+//!
+//! Goal: 3-5 nodes that survive crashes and network partitions without
+//! losing acknowledged writes, with dashboards and benchmark numbers.
+//!
+//! Planned building blocks:
+//! - Async runtime (Tokio)
+//! - RPC and wire format
+//! - Checksums and byte handling
+//! - Logging and tracing
+//! - Metrics
+//! - CLI
+//! - Benchmarks
+//! - Property tests
+//! - Deterministic network simulation
+//! - Concurrency model checking
+//! - Chaos testing
+//! - Dashboards
+
 use ferrite_core::{Key, KvStore, Result, Value};
 use ferrite_storage::Storage;
-// multi-node, raft-replicated, shared KV store with MVCC transaction
-// raft- consensus algorithms lets the group of machines agrees on the same
-// seq of events, even when some of them crashes or the network drop messages.
-
-// Outcome of this is 3 to 5 node that survives crashes and network
-// partitions without losing ack writes with dashboards, benchmark numbers
-// - async runtime - Tokio
-// - RPC and wire format
-// - checksums and bytes
-// - Logging and tracing
-// - metrics
-// - cli
-// - benchmarks
-// - property-tests
-// - deterministic network simulation
-// - concurrency model checking
-// - chaos
-// - dashboards
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
