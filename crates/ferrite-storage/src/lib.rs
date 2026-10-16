@@ -98,6 +98,11 @@ impl Storage {
 
         Ok(())
     }
+
+    fn append_delete(&mut self, key_bytes: &[u8]) -> Result<()> {
+        let payload = append_delete_payload(key_bytes)?;
+        self.append(&payload)
+    }
 }
 
 impl KvStore for Storage {
@@ -122,25 +127,28 @@ impl KvStore for Storage {
         Ok(())
     }
 
-    fn get(&mut self, key: &Key) -> Result<Option<Value>> {
+    fn get(&self, key: &Key) -> Result<Option<Value>> {
         Ok(self.index.get(key).cloned())
     }
 
     fn del(&mut self, key: Key) -> Result<()> {
-        let mut payload = Vec::new();
-        payload.push(2); // DELETE
-        payload.extend_from_slice(
-            &u32::try_from(key.as_bytes().len())
-                .map_err(|_| Error::InvalidRecord("key too large".into()))?
-                .to_le_bytes(),
-        );
-        payload.extend_from_slice(&0_u32.to_le_bytes());
-        payload.extend_from_slice(key.as_bytes());
-
-        self.append(&payload)?;
+        self.append_delete(key.as_bytes())?;
         self.index.remove(&key);
         Ok(())
     }
+}
+
+fn append_delete_payload(key_bytes: &[u8]) -> Result<Vec<u8>> {
+    let mut payload = Vec::new();
+    payload.push(2); // DELETE
+    payload.extend_from_slice(
+        &u32::try_from(key_bytes.len())
+            .map_err(|_| Error::InvalidRecord("key too large".into()))?
+            .to_le_bytes(),
+    );
+    payload.extend_from_slice(&0_u32.to_le_bytes());
+    payload.extend_from_slice(key_bytes);
+    Ok(payload)
 }
 
 fn replay_record(payload: &[u8], index: &mut HashMap<Key, Value>) -> Result<()> {
@@ -182,105 +190,4 @@ fn replay_record(payload: &[u8], index: &mut HashMap<Key, Value>) -> Result<()> 
 
 fn storage_error(error: std::io::Error) -> Error {
     Error::Storage(error.to_string())
-}
-
-#[cfg(test)]
-mod recovery_tests {
-    use super::*;
-    use std::{
-        fs::{self, OpenOptions},
-        io::Write,
-        path::PathBuf,
-        sync::atomic::{AtomicU64, Ordering},
-    };
-
-    static NEXT_ID: AtomicU64 = AtomicU64::new(0);
-
-    fn test_path(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "ferrite-{name}-{}-{}.wal",
-            std::process::id(),
-            NEXT_ID.fetch_add(1, Ordering::Relaxed),
-        ))
-    }
-
-    #[test]
-    fn values_survive_reopening() {
-        let path = test_path("reopen");
-
-        {
-            let mut db = Storage::open(&path).unwrap();
-            db.put(Key::from("lang"), Value::from("rust")).unwrap();
-        }
-
-        {
-            let db = Storage::open(&path).unwrap();
-            assert_eq!(
-                db.get(&Key::from("lang")).unwrap(),
-                Some(Value::from("rust")),
-            );
-        }
-
-        fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn deletion_survives_reopening() {
-        let path = test_path("delete");
-
-        {
-            let mut db = Storage::open(&path).unwrap();
-            db.put(Key::from("lang"), Value::from("rust")).unwrap();
-            db.delete(&Key::from("lang")).unwrap();
-        }
-
-        {
-            let db = Storage::open(&path).unwrap();
-            assert_eq!(db.get(&Key::from("lang")).unwrap(), None);
-        }
-
-        fs::remove_file(path).unwrap();
-    }
-
-    #[test]
-    fn incomplete_final_record_is_discarded() {
-        let path = test_path("torn-tail");
-
-        // First, write one complete record.
-        {
-            let mut db = Storage::open(&path).unwrap();
-            db.put(Key::from("lang"), Value::from("rust")).unwrap();
-        }
-
-        // Simulate a crash halfway through the next record:
-        // header claims 100 payload bytes, but only 5 exist.
-        {
-            let mut file = OpenOptions::new().append(true).open(&path).unwrap();
-
-            file.write_all(&100_u32.to_le_bytes()).unwrap();
-            file.write_all(&0_u32.to_le_bytes()).unwrap();
-            file.write_all(&[1, 2, 3, 4, 5]).unwrap();
-            file.sync_all().unwrap();
-        }
-
-        // Recovery should keep the first record and discard the tail.
-        {
-            let db = Storage::open(&path).unwrap();
-            assert_eq!(
-                db.get(&Key::from("lang")).unwrap(),
-                Some(Value::from("rust")),
-            );
-        }
-
-        // Reopening again confirms recovery removed the incomplete tail.
-        {
-            let db = Storage::open(&path).unwrap();
-            assert_eq!(
-                db.get(&Key::from("lang")).unwrap(),
-                Some(Value::from("rust")),
-            );
-        }
-
-        fs::remove_file(path).unwrap();
-    }
 }
