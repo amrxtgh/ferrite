@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    io::{Read, Write},
     path::Path,
 };
 
@@ -20,7 +20,7 @@ impl Storage {
         let mut file = OpenOptions::new()
             .create(true)
             .read(true)
-            .write(true)
+            .append(true)
             .open(path)
             .map_err(storage_error)?;
 
@@ -69,8 +69,6 @@ impl Storage {
         if pos != bytes.len() {
             file.set_len(pos as u64).map_err(storage_error)?;
         }
-
-        file.seek(SeekFrom::End(0)).map_err(storage_error)?;
 
         Ok(Self { file, index })
     }
