@@ -15,7 +15,7 @@ pub struct Storage {
 }
 
 impl Storage {
-    // what is path here tbh
+    // Open the database file and reconstruct the current database state from the records already stored in it
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let mut file = OpenOptions::new()
             .create(true)
@@ -24,6 +24,7 @@ impl Storage {
             .open(path)
             .map_err(storage_error)?;
 
+        // if the file grows up to 100GB then we cannot load the entire file into a machine with 12GB of RAM
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes).map_err(storage_error)?;
 
@@ -38,6 +39,8 @@ impl Storage {
                 break; // Incomplete final header.
             }
 
+            // can i ask you why there is little endian
+            // Length | Checksum | Payload
             let len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap()) as usize;
             pos += 4;
 
@@ -61,6 +64,7 @@ impl Storage {
                 )));
             }
 
+            // replay record interprets the payload's content
             replay_record(payload, &mut index)?;
             pos += len;
         }
@@ -73,6 +77,8 @@ impl Storage {
         Ok(Self { file, index })
     }
 
+    // Build the records outer header: length+checksum
+    // write the header and payload to the file
     fn append(&mut self, payload: &[u8]) -> Result<()> {
         let len = u32::try_from(payload.len())
             .map_err(|_| Error::InvalidRecord("record too large".into()))?;
