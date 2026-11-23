@@ -24,54 +24,51 @@ impl Storage {
             .open(path)
             .map_err(storage_error)?;
 
-        // if the file grows up to 100GB then we cannot load the entire file into a machine with 12GB of RAM
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes).map_err(storage_error)?;
-
         let mut index = HashMap::new();
-        let mut pos = 0;
+        let file_len = file.metadata().map_err(storage_error)?.len();
+        let mut pos = 0_u64;
 
-        while pos < bytes.len() {
+        while pos < file_len {
             let record_start = pos;
 
             // Record header: payload length (u32), checksum (u32).
-            if bytes.len() - pos < 8 {
+            if file_len - pos < 8 {
                 break; // Incomplete final header.
             }
 
-            // can i ask you why there is little endian
-            // Length | Checksum | Payload
-            let len = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap()) as usize;
-            pos += 4;
-
-            let checksum = u32::from_le_bytes(bytes[pos..pos + 4].try_into().unwrap());
-            pos += 4;
+            let mut header = [0_u8; 8];
+            file.read_exact(&mut header).map_err(storage_error)?;
+            pos += header.len() as u64;
+            let len = u32::from_le_bytes(header[..4].try_into().unwrap()) as usize;
+            let checksum = u32::from_le_bytes(header[4..].try_into().unwrap());
 
             if len > MAX_RECORD_SIZE {
                 return Err(Error::InvalidRecord("record exceeds maximum size".into()));
             }
 
-            if bytes.len() - pos < len {
+            if file_len - pos < len as u64 {
                 pos = record_start;
                 break; // Incomplete final payload.
             }
 
-            let payload = &bytes[pos..pos + len];
+            // Keep recovery memory bounded to one record instead of the entire WAL.
+            let mut payload = vec![0; len];
+            file.read_exact(&mut payload).map_err(storage_error)?;
 
-            if crc32fast::hash(payload) != checksum {
+            if crc32fast::hash(&payload) != checksum {
                 return Err(Error::InvalidRecord(format!(
                     "checksum mismatch at byte {record_start}"
                 )));
             }
 
             // replay record interprets the payload's content
-            replay_record(payload, &mut index)?;
-            pos += len;
+            replay_record(&payload, &mut index)?;
+            pos += len as u64;
         }
 
         // Discard an incomplete tail left by a crash.
-        if pos != bytes.len() {
-            file.set_len(pos as u64).map_err(storage_error)?;
+        if pos != file_len {
+            file.set_len(pos).map_err(storage_error)?;
         }
 
         Ok(Self { file, index })
@@ -89,12 +86,10 @@ impl Storage {
 
         let checksum = crc32fast::hash(payload);
 
-        self.file
-            .write_all(&len.to_le_bytes())
-            .map_err(storage_error)?;
-        self.file
-            .write_all(&checksum.to_le_bytes())
-            .map_err(storage_error)?;
+        let mut header = [0_u8; 8];
+        header[..4].copy_from_slice(&len.to_le_bytes());
+        header[4..].copy_from_slice(&checksum.to_le_bytes());
+        self.file.write_all(&header).map_err(storage_error)?;
         self.file.write_all(payload).map_err(storage_error)?;
 
         // A successful durable write is not returned before this succeeds.
