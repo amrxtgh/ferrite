@@ -29,10 +29,7 @@ fn values_survive_reopening() {
 
     {
         let db = Storage::open(&path).unwrap();
-        assert_eq!(
-            db.get(&Key::new("lang")).unwrap(),
-            Some(Value::new("rust")),
-        );
+        assert_eq!(db.get(&Key::new("lang")).unwrap(), Some(Value::new("rust")),);
     }
 
     fs::remove_file(path).unwrap();
@@ -80,20 +77,39 @@ fn incomplete_final_record_is_discarded() {
     // Recovery should keep the first record and discard the tail.
     {
         let db = Storage::open(&path).unwrap();
-        assert_eq!(
-            db.get(&Key::new("lang")).unwrap(),
-            Some(Value::new("rust")),
-        );
+        assert_eq!(db.get(&Key::new("lang")).unwrap(), Some(Value::new("rust")),);
     }
 
     // Reopening again confirms recovery removed the incomplete tail.
     {
         let db = Storage::open(&path).unwrap();
-        assert_eq!(
-            db.get(&Key::new("lang")).unwrap(),
-            Some(Value::new("rust")),
-        );
+        assert_eq!(db.get(&Key::new("lang")).unwrap(), Some(Value::new("rust")),);
     }
 
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn incomplete_final_header_is_discarded() {
+    let path = test_path("torn-header");
+
+    let valid_len = {
+        let mut db = Storage::open(&path).unwrap();
+        db.put(Key::new("lang"), Value::new("rust")).unwrap();
+        fs::metadata(&path).unwrap().len()
+    };
+
+    {
+        let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+        file.write_all(&[1, 2, 3]).unwrap();
+        file.sync_all().unwrap();
+    }
+
+    {
+        let db = Storage::open(&path).unwrap();
+        assert_eq!(db.get(&Key::new("lang")).unwrap(), Some(Value::new("rust")),);
+    }
+
+    assert_eq!(fs::metadata(&path).unwrap().len(), valid_len);
     fs::remove_file(path).unwrap();
 }
